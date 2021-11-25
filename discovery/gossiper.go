@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime"
@@ -1806,6 +1807,10 @@ func (d *AuthenticatedGossiper) processNetworkAnnouncement(
 
 		blockHeight := msg.ShortChannelID.BlockHeight
 		shortChanID := msg.ShortChannelID
+
+		b, _ := json.MarshalIndent(msg, "", "    ")
+		fmt.Println("--processNetworkAnnouncement.ChannelUpdate", string(b))
+		fmt.Println("--processNetworkAnnouncement.Disabled", msg.ChannelFlags&lnwire.ChanUpdateDisabled > 0)
 
 		// If the advertised inclusionary block is beyond our knowledge
 		// of the chain tip, then we'll put the announcement in limbo

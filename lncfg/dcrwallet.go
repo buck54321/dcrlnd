@@ -1,5 +1,10 @@
 package lncfg
 
+import (
+	"decred.org/dcrwallet/v2/wallet"
+	"github.com/decred/dcrlnd/lnwallet/dcrwallet"
+)
+
 type DcrwalletConfig struct {
 	GRPCHost       string `long:"grpchost" description:"The wallet's grpc listening address. If a port is omitted, then the default port for the selected chain parameters will be used."`
 	CertPath       string `long:"certpath" description:"The file containing the wallet's certificate file."`
@@ -9,4 +14,13 @@ type DcrwalletConfig struct {
 
 	SPV        bool     `long:"spv" description:"Whether to use SPV mode when using an embedded wallet"`
 	SPVConnect []string `long:"spvconnect" description:"Addresses to connect to when using spv mode"`
+
+	ManagedWallet *ManagedWallet
+}
+
+type ManagedWallet struct {
+	Wallet  *wallet.Wallet
+	AcctNum uint32
+	Syncer  dcrwallet.SyncManager
+	PW      []byte
 }

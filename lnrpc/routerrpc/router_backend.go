@@ -224,7 +224,6 @@ func (r *RouterBackend) QueryRoutes(ctx context.Context,
 		FeeLimit: feeLimit,
 		ProbabilitySource: func(fromNode, toNode route.Vertex,
 			amt lnwire.MilliAtom) float64 {
-
 			if _, ok := ignoredNodes[fromNode]; ok {
 				return 0
 			}

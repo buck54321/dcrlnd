@@ -350,7 +350,6 @@ func getOutgoingBalance(node route.Vertex, outgoingChans map[uint64]struct{},
 		}
 
 		bandwidth, ok := bandwidthHints[chanID]
-
 		// If the bandwidth is not available, use the channel capacity.
 		// This can happen when a channel is added to the graph after
 		// we've already queried the bandwidth hints.
@@ -473,6 +472,7 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 
 		// If the total outgoing balance isn't sufficient, it will be
 		// impossible to complete the payment.
+
 		if total < amt {
 			return nil, errInsufficientBalance
 		}
@@ -596,7 +596,6 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 		}
 
 		incomingCltv := toNodeDist.incomingCltv + int32(timeLockDelta)
-
 		// Check that we are within our CLTV limit.
 		if uint64(incomingCltv) > absoluteCltvLimit {
 			return
@@ -803,7 +802,6 @@ func findPath(g *graphParams, r *RestrictParams, cfg *PathFindingConfig,
 			// Apply last hop restriction if set.
 			if r.LastHop != nil &&
 				pivot == target && fromNode != *r.LastHop {
-
 				continue
 			}
 

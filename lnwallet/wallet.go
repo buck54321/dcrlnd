@@ -1472,6 +1472,7 @@ func (l *LightningWallet) handleFundingCounterPartySigs(msg *addCounterPartySigs
 	// As we've completed the funding process, we'll no convert the
 	// contribution structs into their underlying channel config objects to
 	// he stored within the database.
+
 	res.partialState.LocalChanCfg = res.ourContribution.toChanConfig()
 	res.partialState.RemoteChanCfg = res.theirContribution.toChanConfig()
 

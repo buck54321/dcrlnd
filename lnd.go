@@ -332,6 +332,16 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 
 	isRemoteWallet := cfg.Dcrwallet.GRPCHost != "" && cfg.Dcrwallet.CertPath != ""
 
+	isManagedWallet := cfg.Dcrwallet.ManagedWallet != nil
+
+	if isManagedWallet && isRemoteWallet {
+		return fmt.Errorf("managed wallet incompatible with remote wallet")
+	}
+
+	if isManagedWallet {
+		privateWalletPw = cfg.Dcrwallet.ManagedWallet.PW
+	}
+
 	// getListeners is a closure that creates listeners from the
 	// RPCListeners defined in the config. It also returns a cleanup
 	// closure and the server options to use for the GRPC server.
@@ -634,6 +644,9 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 
 	// Initialize the ChainedAcceptor.
 	chainedAcceptor := chanacceptor.NewChainedAcceptor()
+	if cfg.ChanAcceptor != nil {
+		chainedAcceptor.AddAcceptor(cfg.ChanAcceptor)
+	}
 
 	// Set up the core server which will listen for incoming peer
 	// connections.
@@ -732,6 +745,19 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 			return err
 		}
 		defer tower.Stop()
+	}
+
+	if cfg.Ready != nil {
+		go func() {
+			select {
+			case cfg.Ready <- &LNControl{
+				Server:       server,
+				RemoteChanDB: remoteChanDB,
+			}:
+			case <-ctx.Done():
+			}
+		}()
+
 	}
 
 	// Wait for shutdown signal from either a graceful server stop or from

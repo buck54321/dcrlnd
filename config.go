@@ -21,6 +21,7 @@ import (
 	"github.com/decred/dcrd/dcrutil/v4"
 	"github.com/decred/dcrlnd/autopilot"
 	"github.com/decred/dcrlnd/build"
+	"github.com/decred/dcrlnd/chanacceptor"
 	"github.com/decred/dcrlnd/chanbackup"
 	"github.com/decred/dcrlnd/channeldb"
 	"github.com/decred/dcrlnd/discovery"
@@ -28,8 +29,14 @@ import (
 	"github.com/decred/dcrlnd/htlcswitch/hodl"
 	"github.com/decred/dcrlnd/input"
 	"github.com/decred/dcrlnd/lncfg"
+	"github.com/decred/dcrlnd/lnrpc/autopilotrpc"
+	"github.com/decred/dcrlnd/lnrpc/chainrpc"
+	"github.com/decred/dcrlnd/lnrpc/invoicesrpc"
 	"github.com/decred/dcrlnd/lnrpc/routerrpc"
 	"github.com/decred/dcrlnd/lnrpc/signrpc"
+	"github.com/decred/dcrlnd/lnrpc/walletrpc"
+	"github.com/decred/dcrlnd/lnrpc/watchtowerrpc"
+	"github.com/decred/dcrlnd/lnrpc/wtclientrpc"
 	"github.com/decred/dcrlnd/lnwire"
 	"github.com/decred/dcrlnd/routing"
 	"github.com/decred/dcrlnd/tor"
@@ -297,6 +304,8 @@ type Config struct {
 	// hooked up to.
 	LogWriter *build.RotatingLogWriter
 
+	ChanAcceptor chanacceptor.ChannelAcceptor
+
 	// registeredChains keeps track of all chains that have been registered
 	// with the daemon.
 	registeredChains *chainRegistry
@@ -305,6 +314,15 @@ type Config struct {
 	// network. This path will hold the files related to each different
 	// network.
 	networkDir string
+
+	// Ready will receive a struct with primary node interfaces when all
+	// subsystems are ready for use.
+	Ready chan *LNControl
+}
+
+type LNControl struct {
+	Server       interface{}
+	RemoteChanDB interface{}
 }
 
 // DefaultConfig returns all default values for the Config struct.
@@ -338,8 +356,14 @@ func DefaultConfig() Config {
 		MinBackoff:         defaultMinBackoff,
 		MaxBackoff:         defaultMaxBackoff,
 		SubRPCServers: &subRPCServerConfigs{
-			SignRPC:   &signrpc.Config{},
-			RouterRPC: routerrpc.DefaultConfig(),
+			SignRPC:             &signrpc.Config{},
+			WalletKitRPC:        &walletrpc.Config{},
+			AutopilotRPC:        &autopilotrpc.Config{},
+			ChainRPC:            &chainrpc.Config{},
+			InvoicesRPC:         &invoicesrpc.Config{},
+			RouterRPC:           routerrpc.DefaultConfig(),
+			WatchtowerRPC:       &watchtowerrpc.Config{},
+			WatchtowerClientRPC: &wtclientrpc.Config{},
 		},
 		Autopilot: &lncfg.AutoPilot{
 			MaxChannels:    5,
@@ -384,6 +408,8 @@ func DefaultConfig() Config {
 		Watchtower: &lncfg.Watchtower{
 			TowerDir: defaultTowerDir,
 		},
+		WtClient:        &lncfg.WtClient{},
+		ProtocolOptions: &lncfg.ProtocolOptions{},
 		HealthChecks: &lncfg.HealthCheckConfig{
 			ChainCheck: &lncfg.CheckConfig{
 				Interval: defaultChainInterval,

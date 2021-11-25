@@ -21,14 +21,14 @@ import (
 	"github.com/decred/dcrlnd/lnwallet/chainfee"
 
 	base "decred.org/dcrwallet/v2/wallet"
-	"decred.org/dcrwallet/v2/wallet/txauthor"
+	"decred.org/dcrwallet/v2/wallet/txsizes"
 	"decred.org/dcrwallet/v2/wallet/udb"
 	walletloader "github.com/decred/dcrlnd/lnwallet/dcrwallet/loader"
 )
 
 const (
-	defaultAccount = uint32(udb.DefaultAccountNum)
-	scriptVersion  = uint16(0)
+	DefaultAccountNum = uint32(udb.DefaultAccountNum)
+	scriptVersion     = uint16(0)
 
 	// UnconfirmedHeight is the special case end height that is used to
 	// obtain unconfirmed transactions from ListTransactionDetails.
@@ -61,8 +61,9 @@ const (
 // wallet has been fully synced.
 type DcrWallet struct {
 	// wallet is an active instance of dcrwallet.
-	wallet *base.Wallet
-	loader *walletloader.Loader
+	wallet  *base.Wallet
+	acctNum uint32
+	loader  *walletloader.Loader
 
 	// atomicWalletSync controls the current sync status of the wallet. It
 	// MUST be used atomically.
@@ -133,6 +134,7 @@ func New(cfg Config) (*DcrWallet, error) {
 	return &DcrWallet{
 		cfg:                &cfg,
 		wallet:             wallet,
+		acctNum:            cfg.AccountNumber,
 		loader:             loader,
 		syncer:             syncer,
 		syncedChan:         make(chan struct{}),
@@ -147,6 +149,9 @@ func New(cfg Config) (*DcrWallet, error) {
 //
 // This is a part of the WalletController interface.
 func (b *DcrWallet) BackEnd() string {
+	if b.syncer == nil {
+		return "managed"
+	}
 	if _, is := b.syncer.(*RPCSyncer); is {
 		// This package only supports full node backends for the moment
 		return "dcrd"
@@ -175,11 +180,27 @@ func (b *DcrWallet) Start() error {
 	// (1017, 1) exists within the internal waddrmgr. We'll need this in
 	// order to properly generate the keys required for signing various
 	// contracts.
-	if err := b.wallet.Unlock(context.TODO(), b.cfg.PrivatePass, nil); err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(b.ctx, time.Minute)
+	defer cancel()
+
+	acctHasPass, err := b.wallet.AccountHasPassphrase(ctx, b.cfg.AccountNumber)
+	if err != nil {
+		return fmt.Errorf("AccountHasPassphrase error: %v", err)
+	}
+
+	if acctHasPass {
+		if err := b.wallet.UnlockAccount(ctx, b.cfg.AccountNumber, b.cfg.PrivatePass); err != nil {
+			return fmt.Errorf("UnlockAccount error: %w", err)
+		}
+	} else if err := b.wallet.Unlock(ctx, b.cfg.PrivatePass, nil); err != nil {
+		return fmt.Errorf("Unlock error: %w", err)
 	}
 
 	// And then start the syncer backend for this wallet.
+	if b.syncer == nil {
+		return nil
+	}
+
 	if err := b.syncer.start(b); err != nil {
 		return err
 	}
@@ -194,9 +215,10 @@ func (b *DcrWallet) Start() error {
 func (b *DcrWallet) Stop() error {
 	dcrwLog.Debug("Requesting wallet shutdown")
 	b.cancelCtx()
-	b.syncer.stop()
-	b.syncer.waitForShutdown()
-
+	if b.syncer != nil {
+		b.syncer.stop()
+		b.syncer.waitForShutdown()
+	}
 	dcrwLog.Debugf("Wallet has shut down")
 
 	return nil
@@ -212,7 +234,7 @@ func (b *DcrWallet) Stop() error {
 // TODO(matheusd) Remove witness argument, given that's not applicable to decred
 func (b *DcrWallet) ConfirmedBalance(confs int32) (dcrutil.Amount, error) {
 
-	balances, err := b.wallet.AccountBalance(context.TODO(), defaultAccount, confs)
+	balances, err := b.wallet.AccountBalance(context.TODO(), b.acctNum, confs)
 	if err != nil {
 		return 0, err
 	}
@@ -238,9 +260,9 @@ func (b *DcrWallet) NewAddress(t lnwallet.AddressType, change bool) (stdaddr.Add
 	var addr stdaddr.Address
 	var err error
 	if change {
-		addr, err = b.wallet.NewInternalAddress(context.TODO(), defaultAccount)
+		addr, err = b.wallet.NewInternalAddress(context.TODO(), b.acctNum)
 	} else {
-		addr, err = b.wallet.NewExternalAddress(context.TODO(), defaultAccount)
+		addr, err = b.wallet.NewExternalAddress(context.TODO(), b.acctNum)
 	}
 
 	if err != nil {
@@ -268,7 +290,7 @@ func (b *DcrWallet) LastUnusedAddress(addrType lnwallet.AddressType) (
 	default:
 		return nil, fmt.Errorf("unknown address type")
 	}
-	a, err := b.wallet.CurrentAddress(defaultAccount)
+	a, err := b.wallet.CurrentAddress(b.acctNum)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +328,7 @@ func (b *DcrWallet) SendOutputs(outputs []*wire.TxOut,
 	defer b.wallet.SetRelayFee(oldRelayFee)
 
 	txHash, err := b.wallet.SendOutputs(context.TODO(), outputs,
-		defaultAccount, defaultAccount, 1)
+		b.acctNum, b.acctNum, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -330,16 +352,50 @@ func (b *DcrWallet) SendOutputs(outputs []*wire.TxOut,
 // the database. A tx created with this set to true SHOULD NOT be broadcasted.
 //
 // This is a part of the WalletController interface.
-func (b *DcrWallet) CreateSimpleTx(outputs []*wire.TxOut,
-	feeRate chainfee.AtomPerKByte, dryRun bool) (*txauthor.AuthoredTx, error) {
+func (b *DcrWallet) EstimateTxFee(outputs []*wire.TxOut,
+	feeRate chainfee.AtomPerKByte) (fee int64, err error) {
 
 	// Sanity check outputs.
 	if len(outputs) < 1 {
-		return nil, lnwallet.ErrNoOutputs
+		return 0, lnwallet.ErrNoOutputs
 	}
 
-	// TODO(decred) Review semantics for btcwallet's CreateSimpleTx.
-	return nil, fmt.Errorf("CreateSimpleTx unimplemented for dcrwallet")
+	changeSource := &dryRunChangeSource{b.netParams}
+	feeAmt := dcrutil.Amount(feeRate)
+
+	// TODO:
+	tx, err := b.wallet.NewUnsignedTransaction(
+		b.ctx, outputs, feeAmt, b.acctNum, 0,
+		base.OutputSelectionAlgorithmDefault, changeSource, nil, // nil inputSource uses any available with minConf.
+	)
+	if err != nil {
+		return 0, fmt.Errorf("NewUnsignedTransaction error: %w", err)
+	}
+
+	var outputSum int64
+	for _, op := range tx.Tx.TxOut {
+		outputSum += op.Value
+	}
+
+	return int64(tx.TotalInput) - outputSum, nil
+}
+
+type dryRunChangeSource struct {
+	chainParams *chaincfg.Params
+}
+
+func (d *dryRunChangeSource) Script() (script []byte, version uint16, err error) {
+	pkHash := dcrutil.Hash160([]byte("dummy"))
+	p2pkh, err := stdaddr.NewAddressPubKeyHashEcdsaSecp256k1V0(pkHash, d.chainParams)
+	if err != nil {
+		return nil, 0, err
+	}
+	version, script = p2pkh.PaymentScript()
+	return
+}
+
+func (*dryRunChangeSource) ScriptSize() int {
+	return txsizes.P2PKHPkScriptSize
 }
 
 // LockOutpoint marks an outpoint as locked meaning it will no longer be deemed

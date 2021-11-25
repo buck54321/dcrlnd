@@ -95,6 +95,9 @@ type Config struct {
 	// normally when creating the DcrWallet.
 	Wallet *wallet.Wallet
 
+	// AccountNumber is the wallet account number to use.
+	AccountNumber uint32
+
 	// Loader is the loader used to initialize the Wallet field. If Wallet
 	// is specified, then Loader MUST be specified as well.
 	Loader *walletloader.Loader

@@ -33,6 +33,8 @@ type SPVSyncer struct {
 	cancel func()
 }
 
+var _ WalletSyncer = (*SPVSyncer)(nil)
+
 // NewSPVSyncer initializes a new syncer backed by the dcrd network in SPV
 // mode.
 func NewSPVSyncer(cfg *SPVSyncerConfig) (*SPVSyncer, error) {

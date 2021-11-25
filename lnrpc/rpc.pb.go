@@ -1249,7 +1249,7 @@ type Transaction struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// The transaction hash
+	// The transaction hash. (NOTE: This is actually a txid)
 	TxHash string `protobuf:"bytes,1,opt,name=tx_hash,json=txHash,proto3" json:"tx_hash,omitempty"`
 	// The transaction amount, denominated in atoms
 	Amount int64 `protobuf:"varint,2,opt,name=amount,proto3" json:"amount,omitempty"`
@@ -5610,6 +5610,7 @@ type PendingUpdate struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// NOTE: This is actually a tx hash.
 	Txid        []byte `protobuf:"bytes,1,opt,name=txid,proto3" json:"txid,omitempty"`
 	OutputIndex uint32 `protobuf:"varint,2,opt,name=output_index,json=outputIndex,proto3" json:"output_index,omitempty"`
 }

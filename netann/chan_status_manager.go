@@ -2,6 +2,7 @@ package netann
 
 import (
 	"errors"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -222,6 +223,7 @@ func (m *ChanStatusManager) RequestEnable(outpoint wire.OutPoint) error {
 // be taken. Otherwise, a new announcement will be signed with the disabled bit
 // set and broadcast to the network.
 func (m *ChanStatusManager) RequestDisable(outpoint wire.OutPoint) error {
+	debug.PrintStack()
 	return m.submitRequest(m.disableRequests, outpoint)
 }
 

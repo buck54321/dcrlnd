@@ -402,6 +402,7 @@ func (r *ChannelReservation) CommitConstraints(c *channeldb.ChannelConstraints) 
 
 	// Fail if we consider the channel reserve to be too large.  We
 	// currently fail if it is greater than 20% of the channel capacity.
+
 	maxChanReserve := r.partialState.Capacity / 5
 	if c.ChanReserve > maxChanReserve {
 		return ErrChanReserveTooLarge(c.ChanReserve, maxChanReserve)

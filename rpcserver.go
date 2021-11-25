@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"decred.org/dcrwallet/v2/wallet/txauthor"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/chaincfg/v3"
@@ -1156,22 +1155,15 @@ func (r *rpcServer) EstimateFee(ctx context.Context,
 
 	// We will ask the wallet to create a tx using this fee rate. We set
 	// dryRun=true to avoid inflating the change addresses in the db.
-	var tx *txauthor.AuthoredTx
+	var totalFee int64
 	wallet := r.server.cc.wallet
 	err = wallet.WithCoinSelectLock(func() error {
-		tx, err = wallet.CreateSimpleTx(outputs, feePerKB, true)
+		totalFee, err = wallet.EstimateTxFee(outputs, feePerKB)
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	// Use the created tx to calculate the total fee.
-	totalOutput := int64(0)
-	for _, out := range tx.Tx.TxOut {
-		totalOutput += out.Value
-	}
-	totalFee := int64(tx.TotalInput) - totalOutput
 
 	resp := &lnrpc.EstimateFeeResponse{
 		FeeAtoms:            totalFee,
@@ -1801,6 +1793,7 @@ func (r *rpcServer) parseOpenChannelReq(in *lnrpc.OpenChannelRequest,
 	// Restrict the size of the channel we'll actually open. At a later
 	// level, we'll ensure that the output we create after accounting for
 	// fees that a dust output isn't created.
+	// TODO(buck): Should be localFundingAmt < r.cfg.MinChanSize ?
 	if localFundingAmt < minChanFundingSize {
 		return nil, fmt.Errorf("channel is too small, the minimum "+
 			"channel size is: %v atoms", int64(minChanFundingSize))

@@ -197,7 +197,6 @@ func newPaymentSession(p *LightningPayment,
 // NOTE: Part of the PaymentSession interface.
 func (p *paymentSession) RequestRoute(maxAmt, feeLimit lnwire.MilliAtom,
 	activeShards, height uint32) (*route.Route, error) {
-
 	if p.empty {
 		return nil, errEmptyPaySession
 	}

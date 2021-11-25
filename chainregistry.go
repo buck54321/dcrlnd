@@ -190,6 +190,18 @@ func newChainControlFromConfig(cfg *Config, localDB, remoteDB *channeldb.DB,
 			"unknown", cfg.registeredChains.PrimaryChain())
 	}
 
+	// If this wallet is not backed by a full node, use a web-based fee
+	// estimator.
+	if cfg.Node == "dcrw" {
+		switch {
+		case cfg.TestNet3:
+			cc.feeEstimator = chainfee.NewDCRDataEstimator(true, defaultDecredStaticFeePerKB)
+		case cfg.SimNet, cfg.TestNet3, cfg.RegTest:
+		default: // mainnet
+			cc.feeEstimator = chainfee.NewDCRDataEstimator(false, defaultDecredStaticFeePerKB)
+		}
+	}
+
 	var (
 		err       error
 		rpcConfig *rpcclient.ConnConfig
@@ -216,16 +228,18 @@ func newChainControlFromConfig(cfg *Config, localDB, remoteDB *channeldb.DB,
 			"'node=dcrw' config")
 	}
 
+	wcfg := cfg.Dcrwallet
+
 	// When running in embedded wallet mode with spv on, we only support
 	// running in dcrw mode.
-	if conn == nil && cfg.Dcrwallet.SPV && cfg.Node != "dcrw" {
+	if conn == nil && wcfg.SPV && cfg.Node != "dcrw" {
 		return nil, fmt.Errorf("embedded wallet in SPV mode only " +
 			"supports 'node=dcrw' config")
 	}
 
 	// We only require a dcrd connection when running in embedded mode and
 	// not in SPV mode.
-	needsDcrd := conn == nil && !cfg.Dcrwallet.SPV
+	needsDcrd := conn == nil && !wcfg.SPV
 	if needsDcrd {
 		// Load dcrd's TLS cert for the RPC connection.  If a raw cert
 		// was specified in the config, then we'll set that directly.
@@ -337,13 +351,19 @@ func newChainControlFromConfig(cfg *Config, localDB, remoteDB *channeldb.DB,
 	default:
 		// Initialize the appropriate syncer.
 		var syncer dcrwallet.WalletSyncer
-		switch cfg.Dcrwallet.SPV {
+		acctNum := dcrwallet.DefaultAccountNum
+
+		switch wcfg.SPV {
+		case wcfg.ManagedWallet != nil:
+			wallet = wcfg.ManagedWallet.Wallet
+			acctNum = wcfg.ManagedWallet.AcctNum
+			syncer = dcrwallet.NewManagedSyncer(wcfg.ManagedWallet.Syncer)
 		case false:
 			syncer, err = dcrwallet.NewRPCSyncer(*rpcConfig,
 				activeNetParams.Params)
 		case true:
 			spvCfg := &dcrwallet.SPVSyncerConfig{
-				Peers: cfg.Dcrwallet.SPVConnect,
+				Peers: wcfg.SPVConnect,
 				Net:   activeNetParams.Params,
 				AppDataDir: filepath.Join(cfg.DataDir,
 					activeNetParams.Params.Name),
@@ -365,6 +385,7 @@ func newChainControlFromConfig(cfg *Config, localDB, remoteDB *channeldb.DB,
 			DataDir:        cfg.ChainDir,
 			NetParams:      activeNetParams.Params,
 			Wallet:         wallet,
+			AccountNumber:  acctNum,
 			Loader:         loader,
 			DB:             remoteDB,
 		}
