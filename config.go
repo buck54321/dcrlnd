@@ -21,6 +21,7 @@ import (
 	"github.com/decred/dcrd/dcrutil/v4"
 	"github.com/decred/dcrlnd/autopilot"
 	"github.com/decred/dcrlnd/build"
+	"github.com/decred/dcrlnd/chanacceptor"
 	"github.com/decred/dcrlnd/chanbackup"
 	"github.com/decred/dcrlnd/channeldb"
 	"github.com/decred/dcrlnd/discovery"
@@ -296,6 +297,9 @@ type Config struct {
 	// LogWriter is the root logger that all of the daemon's subloggers are
 	// hooked up to.
 	LogWriter *build.RotatingLogWriter
+
+	// A caller-controlled ChannelAcceptor to be added to the the chain.
+	ChanAcceptor chanacceptor.ChannelAcceptor
 
 	// registeredChains keeps track of all chains that have been registered
 	// with the daemon.

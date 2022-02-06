@@ -634,6 +634,9 @@ func Main(cfg *Config, lisCfg ListenerCfg, shutdownChan <-chan struct{}) error {
 
 	// Initialize the ChainedAcceptor.
 	chainedAcceptor := chanacceptor.NewChainedAcceptor()
+	if cfg.ChanAcceptor != nil {
+		chainedAcceptor.AddAcceptor(cfg.ChanAcceptor)
+	}
 
 	// Set up the core server which will listen for incoming peer
 	// connections.
